@@ -1,4 +1,5 @@
 import os
+import json
 import atexit
 
 import pwndbg
@@ -6,11 +7,54 @@ from pwndbg.commands.context import contextoutput
 
 # Would it be more sensical to use the kitten python API? Yes. Yes it would.
 
+def panic(ret: int, msg):
+    # We let the user read the error message before exiting
+    # because exiting directly will close the debugger window
+    # if it was spawned from pwntools
+    print(msg)
+    input("Press Enter to exit...")
+    exit(ret)
+
+def pid_from_id(id: int):
+    ls = json.loads(os.popen("kitty @ ls").read())
+    for oswindow in ls:
+        for tab in oswindow["tabs"]:
+            for window in tab["windows"]:
+                if int(window["id"]) == id:
+                    return int(window["pid"])
+    panic(3, f"Couldn't find pid of window with id {id}")
+
 def path_from_id(id: int):
-    return os.popen(f"kitten @ ls | jq -r '.[] | .tabs[].windows[] | select(.id == {id}) | .pid' | xargs -I{{}} ls -l /proc/{{}}/fd | grep pts | awk '{{print $NF}}' | uniq").read().strip()
+    # return os.popen(f"kitten @ ls | jq -r '.[] | .tabs[].windows[] | select(.id == {id}) | .pid' | xargs -I{{}} ls -l /proc/{{}}/fd | grep pts | awk '{{print $NF}}' | uniq").read().strip()
+    pid = pid_from_id(id)
+    fd_path = f"/proc/{pid}/fd"
+    open_fds = os.listdir(fd_path)
+    fd_paths = [
+        os.readlink(os.path.join(fd_path, fd))
+        for fd in open_fds
+    ]
+    for p in fd_paths:
+        if p.startswith("/dev/pts/"):
+            return p
+    panic(4, f"Couldn't find path from window id {id}, pid {pid}")
 
 def number_of_windows():
-    return int(os.popen("kitten @ ls | jq '[.[].tabs[] | select(.is_focused)] | .[0].windows | length'").read().strip())
+    # return int(os.popen("kitten @ ls | jq '[.[].tabs[] | select(.is_focused)] | .[0].windows | length'").read().strip())
+    ls = json.loads(os.popen("kitty @ ls").read())
+    for oswindow in ls:
+        for tab in oswindow["tabs"]:
+            if tab["is_focused"]:
+                return len(tab["windows"])
+    return 0
+
+def get_focused_id():
+    ls = json.loads(os.popen("kitten @ ls").read())
+    for oswindow in ls:
+        for tab in oswindow["tabs"]:
+            for window in tab["windows"]:
+                if window["is_self"]:
+                    return window["id"]
+    panic(5, "Couldn't find the id of the focused window.")
 
 def open_layout(one_already_open: bool):
     if one_already_open:
@@ -40,7 +84,7 @@ def open_layout(one_already_open: bool):
 def attach_to_pwndbg():
     panes_paths = {}
     for sec in panes:
-        panes_paths[sec] = path_from_id(panes[sec]) 
+        panes_paths[sec] = path_from_id(int(panes[sec])) 
 
     # Tell pwndbg which panes are to be used for what
     for section, id in panes.items():
@@ -70,15 +114,15 @@ def register_exit():
     atexit.register(lambda: [os.popen(F"kitten @ close-window --match id:{id}").read() for id in panes.values()])
 
 panes = {}
-main_section = os.popen("kitten @ ls | jq -r '.[].tabs[].windows[] | select(.is_self).id'").read().strip()
-
+main_section = get_focused_id()
 num_of_win = number_of_windows()
 if num_of_win > 2:
-    print("Too many windows open! (> 2)")
-    exit(1)
+    panic(1, f"Too many windows open! ({num_of_win} > 2)")
+elif num_of_win <= 0:
+    panic(2, f"No tab is focused? ({num_of_win} <= 0)")
 
 open_layout(num_of_win == 2)
+register_exit() # register early in case we error out
 attach_to_pwndbg()
 cleanup_config()
-register_exit()
 
