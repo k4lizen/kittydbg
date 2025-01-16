@@ -22,3 +22,4 @@ context.terminal = "kitten @ launch --location=before --cwd=current --bias=65".s
 ```
 ![image](https://github.com/user-attachments/assets/056b99fd-146e-4330-b39f-ea36cd28fdbc)
 
+Tbh I'm not sure if this is the best layout, if you fork this / make some adjustments please do share!
