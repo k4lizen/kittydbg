@@ -5,6 +5,8 @@ import atexit
 import pwndbg
 from pwndbg.commands.context import contextoutput
 
+clear_context = False # I like being able to scroll up
+
 # Would it be more sensical to use the kitten python API? Yes. Yes it would.
 
 def panic(ret: int, msg):
@@ -88,16 +90,16 @@ def attach_to_pwndbg():
 
     # Tell pwndbg which panes are to be used for what
     for section, id in panes.items():
-        contextoutput(section, panes_paths[section], False, 'top', None)
+        contextoutput(section, panes_paths[section], clear_context, 'top', None)
 
     # Add remaining sections to already existing panes
-    contextoutput("legend", panes_paths['stack'], None)
-    contextoutput("args", panes_paths["regs"], False, 'top', None)
-    contextoutput("code", panes_paths["disasm"], False, 'top', None)
-    contextoutput("ghidra", panes_paths["disasm"], False, 'top', None)
-    contextoutput("expressions", panes_paths['backtrace'], False, 'top', None)
-    contextoutput("last_signal", panes_paths["backtrace"], False, 'top', None)
-    contextoutput("heap_tracker", panes_paths["backtrace"], False, 'top', None)
+    contextoutput("legend", panes_paths['stack'], clear_context, 'top', None)
+    contextoutput("args", panes_paths["regs"], clear_context, 'top', None)
+    contextoutput("code", panes_paths["disasm"], clear_context, 'top', None)
+    contextoutput("ghidra", panes_paths["disasm"], clear_context, 'top', None)
+    contextoutput("expressions", panes_paths['backtrace'], clear_context, 'top', None)
+    contextoutput("last_signal", panes_paths["backtrace"], clear_context, 'top', None)
+    contextoutput("heap_tracker", panes_paths["backtrace"], clear_context, 'top', None)
 
 def cleanup_config():
     # FIXME: if kitty fixes bias/move fix this to be the same number always
