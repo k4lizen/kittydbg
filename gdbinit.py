@@ -1,6 +1,7 @@
 import os
 import json
 import atexit
+import signal
 
 import pwndbg
 from pwndbg.commands.context import contextoutput
@@ -18,13 +19,9 @@ def panic(ret: int, msg):
     exit(ret)
 
 def pid_from_id(id: int):
-    ls = json.loads(os.popen("kitty @ ls").read())
-    for oswindow in ls:
-        for tab in oswindow["tabs"]:
-            for window in tab["windows"]:
-                if int(window["id"]) == id:
-                    return int(window["pid"])
-    panic(3, f"Couldn't find pid of window with id {id}")
+    ls = json.loads(os.popen(f"kitten @ ls --match id:{id}").read())
+    panes_pid[id] = int(ls[0]["tabs"][0]["windows"][0]["pid"])
+    return panes_pid[id]
 
 def path_from_id(id: int):
     # return os.popen(f"kitten @ ls | jq -r '.[] | .tabs[].windows[] | select(.id == {id}) | .pid' | xargs -I{{}} ls -l /proc/{{}}/fd | grep pts | awk '{{print $NF}}' | uniq").read().strip()
@@ -42,7 +39,7 @@ def path_from_id(id: int):
 
 def number_of_windows():
     # return int(os.popen("kitten @ ls | jq '[.[].tabs[] | select(.is_focused)] | .[0].windows | length'").read().strip())
-    ls = json.loads(os.popen("kitty @ ls").read())
+    ls = json.loads(os.popen("kitten @ ls").read())
     for oswindow in ls:
         for tab in oswindow["tabs"]:
             if tab["is_focused"]:
@@ -50,13 +47,9 @@ def number_of_windows():
     return 0
 
 def get_focused_id():
-    ls = json.loads(os.popen("kitten @ ls").read())
-    for oswindow in ls:
-        for tab in oswindow["tabs"]:
-            for window in tab["windows"]:
-                if window["is_self"]:
-                    return window["id"]
-    panic(5, "Couldn't find the id of the focused window.")
+    # return int(os.popen("kitten @ ls | jq '.[].tabs[].windows[] | select(.is_self).id'").read().strip())
+    ls = json.loads(os.popen("kitten @ ls --match state:focused").read())
+    return int(ls[0]["tabs"][0]["windows"][0]["id"])
 
 def open_layout(one_already_open: bool):
     if one_already_open:
@@ -72,13 +65,12 @@ def open_layout(one_already_open: bool):
     else:
         # In case the screen was already vertically split because of another window (e.g. pwntools output)
         os.popen("kitten @ action layout_action move_to_screen_edge top").read().strip()
-        # Disguisting but what can I do? No option to resize with bias and move_to_screen_edge is bugged
-        os.popen("kitten @ resize-window --axis=vertical --increment=14").read()
+        os.popen("kitten @ action layout_action bias 75").read()
 
     panes["stack"] = os.popen("kitten @ launch --location=hsplit --cwd=current --bias=40 cat").read().strip()
     panes["backtrace"] = os.popen("kitten @ launch --location=after --cwd=current --bias=30 cat").read().strip()
     os.popen(f"kitten @ focus-window --match id:{panes["disasm"]}").read()
-    panes["regs"] = os.popen("kitten @ launch --location=after --cwd=current --bias=50 cat").read().strip()
+    panes["regs"] = os.popen("kitten @ launch --location=after --cwd=current --bias=40 cat").read().strip()
     # os.popen(f"kitten @ focus-window --match id:{main_section}").read()
     # panes["python"] = os.popen("kitten @ launch --location=after --cwd=current --bias=30 python").read().strip()
     os.popen(f"kitten @ focus-window --match id:{main_section}").read()
@@ -102,8 +94,7 @@ def attach_to_pwndbg():
     contextoutput("heap_tracker", panes_paths["backtrace"], clear_context, 'top', None)
 
 def cleanup_config():
-    # FIXME: if kitty fixes bias/move fix this to be the same number always
-    pwndbg.config.context_disasm_lines.value = 18 if num_of_win == 1 else 21
+    pwndbg.config.context_disasm_lines.value = 21
     pwndbg.config.context_stack_lines.value = 18
     pwndbg.config.context_code_lines.value = 15
     # Give backtrace a little more color
@@ -113,9 +104,19 @@ def cleanup_config():
     pwndbg.config.backtrace_frame_label_color.value = "green"   
 
 def register_exit():
-    atexit.register(lambda: [os.popen(F"kitten @ close-window --match id:{id}").read() for id in panes.values()])
+    # atexit.register(lambda: [os.popen(F"kitten @ close-window --match id:{id}").read() for id in panes.values()])
+    # Sending SIGTERM instead of "kitten @ close-window" is faster,
+    # allowing gdb to finish sooner, and preventing pwntools
+    # from interrupting us with SIGTERM while we are already closing.
+    # It should also allow for a more graceful exit for the panes.
+    def kill_panes():
+        for id, pid in panes_pid.items():
+            if id != main_section:
+                os.kill(pid, signal.SIGTERM)
+    atexit.register(kill_panes)
 
 panes = {}
+panes_pid = {}
 main_section = get_focused_id()
 num_of_win = number_of_windows()
 if num_of_win > 2:
