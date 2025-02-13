@@ -5,7 +5,7 @@ A `gdbinit` configuration that uses [kitty](https://github.com/kovidgoyal/kitty)
 Inspired by [pwnmux](https://github.com/joaogodinho/pwnmux) ([blog post](https://blog.jcfg.re/posts/pwndbg-tmux/)). 
 
 # Installation
-Requirements: pwndbg, gdb, kitty. Linux only.
+Requirements: pwndbg, gdb, kitty(v0.39.1+). Linux only.
 ```bash
 git clone https://github.com/k4lizen/kittydbg.git
 echo "source $PWD/kittydbg/gdbinit.py" >> ~/.gdbinit
