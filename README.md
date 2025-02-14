@@ -12,6 +12,14 @@ echo "source $PWD/kittydbg/gdbinit.py" >> ~/.gdbinit
 ```
 Make sure that kittydbg is sourced *after* pwndbg is loaded.
 
+In your kitty config you need:
+```
+allow_remote_control yes
+enabled_layouts splits
+```
+you can have enabled layouts other than `splits`, but you need to be using
+`splits` for kittydbg to spawn the windows correctly.
+
 # Usage
 Start pwndbg from kitty.
 ![image](https://github.com/user-attachments/assets/04e57a6d-710a-4bce-8d9c-af79cd2a3086)
